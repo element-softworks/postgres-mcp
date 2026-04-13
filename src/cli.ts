@@ -45,7 +45,6 @@ interface CliOptions {
   transport?: TransportType;
   port?: number;
   serverHost?: string;
-  authToken?: string;
   stateless?: boolean;
   enableHsts?: boolean;
   oauthEnabled?: boolean;
@@ -141,10 +140,6 @@ program
   .option(
     "--trust-proxy",
     "Trust X-Forwarded-For header for client IP (enable behind reverse proxy)",
-  )
-  .option(
-    "--auth-token <token>",
-    "Simple bearer token for HTTP authentication (env: MCP_AUTH_TOKEN)",
   )
   .option(
     "--stateless",
@@ -292,15 +287,11 @@ program
         "standard") as InstructionLevel;
 
       if (transport === "http" || transport === "sse") {
-        if (
-          !oauthConfig?.enabled &&
-          !options.authToken &&
-          !process.env["MCP_AUTH_TOKEN"]
-        ) {
-          logger.warn(
-            "HTTP transport started WITHOUT authentication — all clients have unrestricted access. " +
-              "Enable OAuth with --oauth-enabled or use --auth-token for simple bearer auth.",
+        if (!process.env["API_KEY"]?.trim()) {
+          logger.error(
+            "HTTP transport requires API_KEY environment variable for authentication.",
           );
+          process.exit(1);
         }
         // Start with HTTP transport
         await startHttpServer(

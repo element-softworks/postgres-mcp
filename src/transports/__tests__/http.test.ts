@@ -496,6 +496,54 @@ describe("HttpTransport", () => {
   });
 
   describe("handleRequest", () => {
+    it("should return 401 when API key is missing", async () => {
+      const transport = new HttpTransport({ port: 3000, apiKey: "test-key" });
+      const req = createMockRequest({
+        method: "GET",
+        url: "/health",
+        headers: { host: "localhost:3000" },
+      });
+      const res = createMockResponse();
+
+      const handleRequest = (
+        transport as unknown as {
+          handleRequest: (
+            req: IncomingMessage,
+            res: ServerResponse,
+          ) => Promise<void>;
+        }
+      ).handleRequest.bind(transport);
+
+      await handleRequest(req, res);
+
+      expect(res._statusCode).toBe(401);
+      expect(res._body).toContain("Valid API key required");
+    });
+
+    it("should allow requests when API key is provided via x-api-key", async () => {
+      const transport = new HttpTransport({ port: 3000, apiKey: "test-key" });
+      const req = createMockRequest({
+        method: "GET",
+        url: "/health",
+        headers: { host: "localhost:3000", "x-api-key": "test-key" },
+      });
+      const res = createMockResponse();
+
+      const handleRequest = (
+        transport as unknown as {
+          handleRequest: (
+            req: IncomingMessage,
+            res: ServerResponse,
+          ) => Promise<void>;
+        }
+      ).handleRequest.bind(transport);
+
+      await handleRequest(req, res);
+
+      expect(res._statusCode).toBe(200);
+      expect(res._body).toContain("healthy");
+    });
+
     it("should handle OPTIONS preflight requests", async () => {
       const transport = new HttpTransport({ port: 3000 });
       const req = createMockRequest({ method: "OPTIONS", url: "/messages" });

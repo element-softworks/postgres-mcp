@@ -215,6 +215,24 @@ export class HttpTransport {
   }
 
   /**
+   * Extract API key from request headers.
+   * Supports x-api-key and Bearer token for compatibility.
+   */
+  private getRequestApiKey(req: IncomingMessage): string | undefined {
+    const xApiKey = req.headers["x-api-key"];
+    if (typeof xApiKey === "string" && xApiKey.length > 0) {
+      return xApiKey;
+    }
+
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith("Bearer ")) {
+      return authHeader.slice(7);
+    }
+
+    return undefined;
+  }
+
+  /**
    * Handle incoming HTTP request
    */
   private async handleRequest(
@@ -246,6 +264,25 @@ export class HttpTransport {
       req.url ?? "/",
       `http://${req.headers.host ?? "127.0.0.1"}`,
     );
+
+    // Enforce API key auth for every non-preflight request, including /health.
+    if (this.config.apiKey) {
+      const requestApiKey = this.getRequestApiKey(req);
+      if (!requestApiKey || requestApiKey !== this.config.apiKey) {
+        res.writeHead(401, {
+          "Content-Type": "application/json",
+          "WWW-Authenticate": 'Bearer realm="postgres-mcp"',
+        });
+        res.end(
+          JSON.stringify({
+            error: "unauthorized",
+            error_description:
+              "Valid API key required via x-api-key or Authorization: Bearer",
+          }),
+        );
+        return;
+      }
+    }
 
     // Health check — bypass rate limiting (always available for monitoring)
     if (url.pathname === "/health") {
@@ -297,43 +334,6 @@ export class HttpTransport {
     if (url.pathname === "/" && req.method === "GET") {
       handleRootInfo(res);
       return;
-    }
-
-    // =========================================================================
-    // Authentication: Simple Bearer Token (lighter-weight alternative to OAuth)
-    // =========================================================================
-    if (this.config.authToken && !this.config.resourceServer) {
-      if (!this.isPublicPath(url.pathname)) {
-        const authHeader = req.headers.authorization;
-        if (!authHeader?.startsWith("Bearer ")) {
-          res.writeHead(401, {
-            "Content-Type": "application/json",
-            "WWW-Authenticate": 'Bearer realm="postgres-mcp"',
-          });
-          res.end(
-            JSON.stringify({
-              error: "unauthorized",
-              error_description: "Bearer token required",
-            }),
-          );
-          return;
-        }
-        const token = authHeader.slice(7);
-        if (token !== this.config.authToken) {
-          res.writeHead(401, {
-            "Content-Type": "application/json",
-            "WWW-Authenticate":
-              'Bearer realm="postgres-mcp", error="invalid_token"',
-          });
-          res.end(
-            JSON.stringify({
-              error: "unauthorized",
-              error_description: "Invalid bearer token",
-            }),
-          );
-          return;
-        }
-      }
     }
 
     // Authenticate if OAuth is configured and path is not public

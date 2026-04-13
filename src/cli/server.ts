@@ -24,7 +24,6 @@ import { VERSION } from "../utils/version.js";
 interface ServerCliOptions {
   port?: number;
   serverHost?: string;
-  authToken?: string;
   stateless?: boolean;
   enableHsts?: boolean;
   trustProxy?: boolean;
@@ -119,11 +118,16 @@ export async function startHttpServer(
   mcpServer.registerComponents();
 
   // Build HTTP transport config
-  const resolvedToken = options.authToken ?? process.env["MCP_AUTH_TOKEN"];
+  const apiKey = process.env["API_KEY"]?.trim();
+  if (!apiKey) {
+    throw new Error(
+      "API_KEY environment variable is required for HTTP transport",
+    );
+  }
   const transportConfig: HttpTransportConfig = {
     port,
     host,
-    ...(resolvedToken !== undefined ? { authToken: resolvedToken } : {}),
+    apiKey,
     stateless: options.stateless ?? false,
     ...(options.enableHsts !== undefined && { enableHSTS: options.enableHsts }),
     publicPaths: oauthConfig?.publicPaths ?? ["/health", "/.well-known/*"],
